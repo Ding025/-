@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>課表視覺化 · Schedule</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500;700&family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#f2ebe0; --paper:#faf6f0; --ink:#3d2f22;
+  --ink-light:#7a6452; --ink-muted:#b0957a; --border:rgba(120,90,60,0.13);
+  --slot-h:78px;
+}
+body{
+  background-color:var(--bg);
+  background-image:
+    radial-gradient(ellipse at 15% 15%,rgba(200,216,192,.25) 0%,transparent 55%),
+    radial-gradient(ellipse at 85% 85%,rgba(216,184,184,.20) 0%,transparent 55%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+  font-family:'Noto Sans TC',sans-serif;color:var(--ink);min-height:100vh;
+}
+
+/* NAV */
+nav{
+position:sticky;top:0;z-index:200;
+background:rgba(242,235,224,.92);backdrop-filter:blur(16px);
+border-bottom:1px solid var(–border);
+display:flex;align-items:center;justify-content:space-between;
+padding:0 44px;height:62px;
+}
+.nav-logo{font-family:'DM Serif Display',serif;font-size:20px;color:var(–ink)}
+.nav-logo em{font-style:italic;color:var(–ink-muted)}
+.nav-tabs{display:flex;gap:2px;background:rgba(120,90,60,.07);border-radius:30px;padding:3px}
+.nav-tab{
+border:none;background:transparent;padding:7px 20px;border-radius:27px;
+font-size:12px;letter-spacing:1.5px;text-transform:uppercase;
+color:var(–ink-light);cursor:pointer;font-family:'Noto Sans TC',sans-serif;
+transition:all .2s;font-weight:500;
+}
+.nav-tab.active{background:var(–paper);color:var(–ink);box-shadow:0 1px 6px rgba(100,70,40,.1)}
+.nav-actions{display:flex;gap:8px;align-items:center}
+.btn-notif{
+border:1px solid var(–border);background:transparent;
+color:var(–ink-light);padding:6px 14px;border-radius:20px;
+font-size:12px;cursor:pointer;transition:all .2s;
+font-family:'Noto Sans TC',sans-serif;letter-spacing:.5px;
+}
+.btn-notif:hover,.btn-notif.on{background:var(–ink);color:var(–paper);border-color:var(–ink)}
+.btn-export{
+background:var(–ink);color:var(–paper);border:none;padding:7px 16px;border-radius:20px;
+font-size:12px;cursor:pointer;letter-spacing:.5px;
+font-family:'Noto Sans TC',sans-serif;transition:opacity .2s;
+}
+.btn-export:hover{opacity:.75}
+
+/* PAGES */
+.page{display:none}
+.page.active{display:block}
+
+/* INPUT PAGE */
+.input-wrap{max-width:740px;margin:0 auto;padding:64px 24px 80px}
+.hero-eyebrow{font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(–ink-muted);margin-bottom:16px;text-align:center}
+.hero-title{font-family:'DM Serif Display',serif;font-size:clamp(34px,5vw,52px);line-height:1.15;color:var(–ink);margin-bottom:14px;text-align:center}
+.hero-title em{font-style:italic;color:var(–ink-muted)}
+.hero-desc{font-size:14px;color:var(–ink-light);line-height:1.9;margin-bottom:48px;text-align:center}
+
+.upload-card,.input-card{
+background:var(–paper);border:1px solid var(–border);border-radius:20px;
+padding:32px 36px 28px;box-shadow:0 6px 40px rgba(100,70,40,.08);
+}
+.upload-card{margin-bottom:16px}
+.card-title{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(–ink-muted);margin-bottom:20px}
+
+/* Dropzone */
+.dropzone{
+border:2px dashed rgba(120,90,60,.25);border-radius:14px;
+padding:36px 24px;text-align:center;cursor:pointer;transition:all .2s;
+position:relative;background:rgba(120,90,60,.025);
+}
+.dropzone:hover,.dropzone.drag{border-color:var(–ink-muted);background:rgba(120,90,60,.05)}
+.dropzone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dz-icon{font-size:38px;margin-bottom:10px;display:block}
+.dz-title{font-size:15px;color:var(–ink);font-weight:500;margin-bottom:6px}
+.dz-sub{font-size:12px;color:var(–ink-muted);line-height:1.6}
+.dz-fmt{margin-top:8px;font-size:11px;color:var(–ink-muted);letter-spacing:1px}
+
+/* Preview */
+.img-preview{display:none;margin-top:14px;border-radius:10px;overflow:hidden;border:1px solid var(–border);position:relative}
+.img-preview img{width:100%;max-height:240px;object-fit:cover;display:block}
+.img-preview-bar{position:absolute;bottom:0;left:0;right:0;background:rgba(61,47,34,.7);color:#fff;font-size:12px;padding:8px 14px}
+.btn-rm{position:absolute;top:8px;right:8px;background:rgba(61,47,34,.7);color:#fff;border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
+
+/* OCR status */
+.ocr-status{display:none;margin-top:12px;padding:12px 16px;border-radius:10px;font-size:13px;line-height:1.6;background:rgba(120,90,60,.05);color:var(–ink-light);border:1px solid var(–border)}
+.ocr-status.done{background:rgba(200,216,192,.3);border-color:rgba(120,160,100,.2);color:var(–ink)}
+.ocr-status.err{background:rgba(220,100,80,.08);border-color:rgba(220,100,80,.2);color:#8b3a2a}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:7px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Divider */
+.divider{display:flex;align-items:center;gap:14px;color:var(–ink-muted);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:22px 0}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(–border)}
+
+/* Format hint */
+.format-box{background:rgba(120,90,60,.04);border-left:2px solid var(–ink-muted);padding:12px 14px;border-radius:0 8px 8px 0;font-size:12px;line-height:2;color:var(–ink-light);margin-bottom:16px;font-family:monospace}
+.format-box strong{display:block;color:var(–ink);font-size:10px;letter-spacing:2px;margin-bottom:4px;font-family:'Noto Sans TC'}
+textarea{
+width:100%;min-height:170px;background:rgba(120,90,60,.03);
+border:1px solid var(–border);border-radius:10px;padding:14px;
+font-size:13px;line-height:2;color:var(–ink);resize:vertical;outline:none;
+font-family:monospace;transition:border .2s;
+}
+textarea:focus{border-color:var(–ink-muted)}
+textarea::placeholder{color:#c0a888}
+
+.btn-row{display:flex;gap:8px;margin-top:14px}
+.btn-gen{
+flex:1;background:var(–ink);color:var(–paper);border:none;padding:13px;border-radius:10px;
+font-size:14px;font-weight:500;cursor:pointer;font-family:'Noto Sans TC',sans-serif;
+transition:opacity .2s;letter-spacing:1px;
+}
+.btn-gen:hover{opacity:.8}
+.btn-gen:disabled{opacity:.4;cursor:not-allowed}
+.btn-ocr{
+width:100%;background:rgba(61,47,34,.08);color:var(–ink);border:1px solid var(–border);
+padding:12px;border-radius:10px;font-size:13px;cursor:pointer;
+font-family:'Noto Sans TC',sans-serif;transition:all .2s;margin-top:14px;letter-spacing:.5px;
+}
+.btn-ocr:hover:not(:disabled){background:rgba(61,47,34,.14)}
+.btn-ocr:disabled{opacity:.4;cursor:not-allowed}
+.btn-sec{
+background:transparent;border:1px solid var(–border);color:var(–ink-light);
+padding:13px 18px;border-radius:10px;font-size:12px;cursor:pointer;
+font-family:'Noto Sans TC',sans-serif;transition:all .2s;
+}
+.btn-sec:hover{border-color:var(–ink-light);color:var(–ink)}
+
+/* SCHEDULE PAGE */
+.schedule-wrap{padding:44px 32px 80px;max-width:1080px;margin:0 auto}
+.sch-header{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:32px;flex-wrap:wrap;gap:14px}
+.sch-title{font-family:'DM Serif Display',serif;font-size:34px;color:var(–ink)}
+.sch-title em{font-style:italic;color:var(–ink-muted)}
+.sch-meta{font-size:12px;color:var(–ink-muted);margin-top:4px;letter-spacing:1px}
+.back-btn{background:transparent;border:1px solid var(–border);color:var(–ink-light);padding:8px 18px;border-radius:20px;font-size:12px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;transition:all .2s}
+.back-btn:hover{background:var(–ink);color:var(–paper);border-color:var(–ink)}
+
+/* TIMETABLE */
+.timetable{display:grid;grid-template-columns:100px repeat(5,1fr);gap:5px}
+.th{text-align:center;padding:8px 0 16px;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(–ink-light);font-weight:600}
+.row-label{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;padding:0 12px 0 0;height:var(–slot-h)}
+.row-label .pname{font-size:12px;font-weight:700;color:var(–ink-light)}
+.row-label .ptime{font-size:10px;color:var(–ink-muted);margin-top:4px;line-height:1.6;text-align:right}
+.row-divider{grid-column:1/-1;height:22px;display:flex;align-items:center}
+.row-divider::after{content:'';display:block;flex:1;height:1.5px;background:rgba(120,90,60,.15);margin-left:105px}
+.cell{height:var(–slot-h);border-radius:10px;background:rgba(200,180,160,.06);border:1px solid var(–border);position:relative}
+.cell.span-cell{background:transparent;border:none}
+
+/* Course block */
+.course-block{
+position:absolute;left:0;right:0;top:0;border-radius:14px;
+padding:8px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+text-align:center;z-index:5;cursor:default;
+transition:transform .15s,box-shadow .15s;
+animation:popIn .35s cubic-bezier(.34,1.56,.64,1) both;overflow:hidden;
+}
+.course-block:hover{transform:scale(1.03) translateY(-2px);box-shadow:0 10px 28px rgba(100,70,40,.16);z-index:10}
+@keyframes popIn{from{opacity:0;transform:scale(.86)}to{opacity:1;transform:scale(1)}}
+.cb-name{font-family:'Noto Serif TC',serif;font-size:13px;font-weight:500;color:var(–ink);line-height:1.35;margin-bottom:4px}
+.cb-room{font-size:11px;font-weight:600;color:var(–ink);opacity:.7;background:rgba(61,47,34,.09);padding:2px 8px;border-radius:6px;letter-spacing:.5px;margin-bottom:3px}
+.cb-time{font-size:10px;color:var(–ink-muted);letter-spacing:.3px}
+.cb-teacher{font-size:10px;color:var(–ink-muted);margin-top:2px}
+
+/* TOAST */
+.toast{position:fixed;bottom:28px;right:28px;background:var(–ink);color:var(–paper);padding:12px 20px;border-radius:10px;font-size:13px;box-shadow:0 4px 24px rgba(0,0,0,.18);z-index:999;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;max-width:300px;line-height:1.5}
+.toast.show{opacity:1;transform:translateY(0)}
+canvas#exportCanvas{display:none}
+
+@media(max-width:700px){
+nav{padding:0 16px}
+.nav-tabs .nav-tab{padding:6px 12px;font-size:10px}
+.input-wrap{padding:36px 14px 60px}
+.upload-card,.input-card{padding:20px 16px}
+.schedule-wrap{padding:24px 10px 60px}
+.timetable{grid-template-columns:66px repeat(5,1fr)}
+:root{–slot-h:60px}
+.cb-name{font-size:11px}
+.cb-room,.cb-time,.cb-teacher{display:none}
+}
+</style>
+
+</head>
+<body>
+
+<!-- NAV -->
+
+<nav>
+  <div class="nav-logo">課表 <em>Schedule</em></div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('input',this)">輸入課程</button>
+    <button class="nav-tab" onclick="showPage('schedule',this)">我的課表</button>
+  </div>
+  <div class="nav-actions">
+    <button class="btn-notif" id="notifBtn" onclick="toggleNotif()">🔔 通知</button>
+    <button class="btn-export" onclick="exportImg()">↓ 匯出圖片</button>
+  </div>
+</nav>
+
+<!-- INPUT PAGE -->
+
+<div class="page active" id="page-input">
+<div class="input-wrap">
+  <div class="hero-eyebrow">課表視覺化工具</div>
+  <h1 class="hero-title">把課表變成<br><em>美麗的格狀圖</em></h1>
+  <p class="hero-desc">上傳課表截圖，AI 自動辨識課程、時間、教室<br>一鍵生成柔和色塊週課表並匯出圖片</p>
+
+  <!-- Upload -->
+
+  <div class="upload-card">
+    <div class="card-title">// 01 · 上傳課表圖片（AI 自動辨識）</div>
+    <div class="dropzone" id="dropzone">
+      <input type="file" id="fileInput" accept="image/*" onchange="handleFile(this.files[0])">
+      <span class="dz-icon">🖼️</span>
+      <div class="dz-title">拖曳或點擊上傳課表圖片</div>
+      <div class="dz-sub">截圖、拍照均可，AI 會讀取所有課程資訊</div>
+      <div class="dz-fmt">JPG · PNG · WEBP · HEIC</div>
+    </div>
+    <div class="img-preview" id="imgPreview">
+      <img id="previewImg" src="" alt="">
+      <div class="img-preview-bar" id="previewBar"></div>
+      <button class="btn-rm" onclick="removeImage()">✕</button>
+    </div>
+    <div class="ocr-status" id="ocrStatus"></div>
+    <button class="btn-ocr" id="btnOcr" onclick="runOCR()" disabled>✦ AI 辨識課程資料</button>
+  </div>
+
+  <div class="divider">或手動輸入</div>
+
+  <!-- Manual input -->
+
+  <div class="input-card">
+    <div class="card-title">// 02 · 手動輸入課程</div>
+    <div style="font-size:13px;color:var(--ink-light);margin-bottom:14px;line-height:1.7">
+      每行一筆：<code>星期 節次 課程名稱 教室 教師（選填）</code>
+    </div>
+    <div class="format-box">
+      <strong>格式範例</strong>
+      週一 D5-D6 初級英文 ES804 張育慈<br>
+      週二 D1-D2 現代散文與習作 LI105 王秀瑋<br>
+      週三 D3-D4 文學概論 LI100 林以衛<br>
+      週四 D5-D6 讀書指導 LI100 黃澤鈞<br>
+      週五 D3-D4 史記 LE304 林郁迢
+    </div>
+    <textarea id="inputTA" placeholder="AI 辨識完成後會自動填入這裡，你也可以直接手動輸入…"></textarea>
+    <div class="btn-row">
+      <button class="btn-gen" onclick="generate()">✦ 生成課表</button>
+      <button class="btn-sec" onclick="loadDemo()">載入範例</button>
+      <button class="btn-sec" onclick="document.getElementById('inputTA').value=''">清除</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- SCHEDULE PAGE -->
+
+<div class="page" id="page-schedule">
+<div class="schedule-wrap">
+  <div class="sch-header">
+    <div>
+      <div class="sch-title">我的<em>課表</em></div>
+      <div class="sch-meta">114學年度 第2學期</div>
+    </div>
+    <button class="back-btn" onclick="showPage('input',document.querySelectorAll('.nav-tab')[0])">← 返回編輯</button>
+  </div>
+  <div class="timetable" id="timetable"></div>
+</div>
+</div>
+
+<canvas id="exportCanvas"></canvas>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ── DATA ── */
+const PERIODS = [
+  {name:'D 1',start:'08:10',end:'09:00'},
+  {name:'D 2',start:'09:10',end:'10:00'},
+  {name:'D 3',start:'10:10',end:'11:00'},
+  {name:'D 4',start:'11:10',end:'12:00'},
+  {name:'D 5',start:'13:40',end:'14:30'},
+  {name:'D 6',start:'14:40',end:'15:30'},
+  {name:'D 7',start:'15:40',end:'16:30'},
+  {name:'D 8',start:'16:40',end:'17:30'},
+];
+const DAYS = ['MON','TUE','WED','THU','FRI'];
+const DAY_ZH = {'一':'MON','二':'TUE','三':'WED','四':'THU','五':'FRI','mon':'MON','tue':'TUE','wed':'WED','thu':'THU','fri':'FRI','monday':'MON','tuesday':'TUE','wednesday':'WED','thursday':'THU','friday':'FRI'};
+const PALETTE = ['#c8d8c0','#e8d8b8','#e8c8b8','#c8c8d8','#c0d0d8','#d8b8b8','#c8c0b8','#d8d0b0','#b8d0c0','#e0c8b0'];
+
+let courses=[], notifOn=false, notifTimers=[], colorMap={}, colorIdx=0, uploadedFile=null;
+
+/* ── PAGE NAV ── */
+function showPage(name, el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  if(el) el.classList.add('active');
+}
+
+/* ── FILE UPLOAD ── */
+const dz = document.getElementById('dropzone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',e=>{
+  e.preventDefault();dz.classList.remove('drag');
+  const f=e.dataTransfer.files[0];
+  if(f&&f.type.startsWith('image/')) handleFile(f);
+});
+
+function handleFile(file){
+  if(!file) return;
+  uploadedFile=file;
+  document.getElementById('previewImg').src=URL.createObjectURL(file);
+  document.getElementById('previewBar').textContent=file.name;
+  document.getElementById('imgPreview').style.display='block';
+  document.getElementById('btnOcr').disabled=false;
+  setOcr('','');
+}
+
+function removeImage(){
+  uploadedFile=null;
+  document.getElementById('imgPreview').style.display='none';
+  document.getElementById('previewImg').src='';
+  document.getElementById('fileInput').value='';
+  document.getElementById('btnOcr').disabled=true;
+  setOcr('','');
+}
+
+function setOcr(type,msg){
+  const el=document.getElementById('ocrStatus');
+  el.className='ocr-status'+(type?' '+type:'');
+  el.style.display=type?'block':'none';
+  el.innerHTML=msg;
+}
+
+/* ── AI OCR ── */
+async function runOCR(){
+  if(!uploadedFile) return;
+  const btn=document.getElementById('btnOcr');
+  btn.disabled=true;
+  setOcr('loading','<span class="spinner"></span> AI 正在辨識課表圖片，請稍候…');
+
+  try{
+    const base64=await fileToBase64(uploadedFile);
+    const mtype=uploadedFile.type||'image/jpeg';
+
+    const prompt=`請仔細辨識這張課表圖片中的所有課程，整理成以下格式（每行一筆課程）：
+星期 節次 課程名稱 教室 教師姓名
+
+格式規則：
+- 星期請用：週一 週二 週三 週四 週五
+- 節次使用D1~D8，跨節請寫範圍如：D3-D4、D5-D6
+- 教室代碼直接填，如 ES804、LI100、LE304
+- 教師姓名填在最後（若有的話）
+- 若教室或教師資訊不存在則省略
+- 只輸出課程清單，不要任何說明文字
+
+範例輸出格式：
+週一 D5-D6 初級英文 ES804 張育慈
+週二 D1-D2 現代散文與習作 LI105 王秀瑋
+週三 D3-D4 文學概論 LI100 林以衛`;
+
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:mtype,data:base64}},
+          {type:'text',text:prompt}
+        ]}]
+      })
+    });
+
+    const data=await resp.json();
+    if(data.error) throw new Error(data.error.message);
+    const text=data.content.map(b=>b.text||'').join('').trim();
+    if(!text) throw new Error('辨識結果為空');
+
+    document.getElementById('inputTA').value=text;
+    const count=text.split('\n').filter(Boolean).length;
+    setOcr('done',`✓ 辨識完成！共找到 ${count} 筆課程，已填入下方。確認後點「生成課表」`);
+    showToast(`✓ AI 辨識成功，共 ${count} 筆課程`);
+
+  }catch(err){
+    setOcr('err','⚠ 辨識失敗：'+err.message+'<br>請手動輸入或重新上傳更清晰的圖片。');
+    showToast('辨識失敗，請手動輸入');
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+function fileToBase64(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]);
+    r.onerror=rej;
+    r.readAsDataURL(file);
+  });
+}
+
+/* ── PARSE ── */
+function parseLine(line){
+  line=line.replace(/^[-•*\s]+/,'').trim();
+  if(!line) return null;
+
+  // Day
+  const dm=line.match(/週([一二三四五])|周([一二三四五])|\b(Monday|Tuesday|Wednesday|Thursday|Friday|Mon|Tue|Wed|Thu|Fri)\b/i);
+  if(!dm) return null;
+  const rawDay=dm[1]||dm[2]||dm[3];
+  const day=DAY_ZH[rawDay]||DAY_ZH[(rawDay||'').toLowerCase()];
+  if(!day) return null;
+  line=line.replace(dm[0],'').trim();
+
+  // Period
+  let pStart=-1,pEnd=-1;
+  const pm=line.match(/[Dd](\d)\s*[-~–]\s*[Dd](\d)|[Dd](\d)[Dd](\d)|[Dd](\d)/);
+  if(pm){
+    if(pm[1]){pStart=parseInt(pm[1])-1;pEnd=parseInt(pm[2])-1}
+    else if(pm[3]){pStart=parseInt(pm[3])-1;pEnd=parseInt(pm[4])-1}
+    else{pStart=pEnd=parseInt(pm[5])-1}
+    line=line.replace(pm[0],'').trim();
+  }else{
+    const nm=line.match(/(\d)\s*[-~]\s*(\d)/);
+    if(nm){pStart=parseInt(nm[1])-1;pEnd=parseInt(nm[2])-1;line=line.replace(nm[0],'').trim()}
+    else return null;
+  }
+  if(pStart<0||pStart>=PERIODS.length) return null;
+  if(pEnd<pStart) pEnd=pStart;
+  if(pEnd>=PERIODS.length) pEnd=PERIODS.length-1;
+
+  // Location
+  let location=null;
+  const lm=line.match(/\b([A-Z]{1,3}\d{3,4}[A-Z]?|[A-Z]+[Bb]\d+|[\u4e00-\u9fa5]+(館|樓|室|廳|場|中心|堂|地))\b/);
+  if(lm){location=lm[0];line=line.replace(lm[0],'').trim()}
+
+  // Teacher
+  let teacher=null;
+  const tm=line.match(/([\u4e00-\u9fa5]{2,4})\s*$/);
+  if(tm){teacher=tm[1];line=line.replace(tm[0],'').trim()}
+
+  const name=line.replace(/\s+/g,' ').trim()||'未命名';
+  return{day,pStart,pEnd,name,location,teacher};
+}
+
+function getColor(name){
+  if(!colorMap[name]){colorMap[name]=PALETTE[colorIdx%PALETTE.length];colorIdx++}
+  return colorMap[name];
+}
+
+/* ── GENERATE ── */
+function generate(){
+  const raw=document.getElementById('inputTA').value;
+  courses=raw.split('\n').map(parseLine).filter(Boolean);
+  if(!courses.length){showToast('⚠ 找不到可解析的課程，請確認格式');return}
+  colorMap={};colorIdx=0;
+  renderTimetable();
+  showPage('schedule',document.querySelectorAll('.nav-tab')[1]);
+  if(notifOn) scheduleNotifs();
+  showToast(`✦ 已生成 ${courses.length} 門課程`);
+}
+
+/* ── RENDER ── */
+function renderTimetable(){
+  const tt=document.getElementById('timetable');
+  tt.innerHTML='';
+
+  // Build grid
+  const grid=Array.from({length:PERIODS.length},()=>Object.fromEntries(DAYS.map(d=>[d,null])));
+  for(const c of courses){
+    for(let p=c.pStart;p<=c.pEnd&&p<PERIODS.length;p++){
+      grid[p][c.day]=(p===c.pStart)?c:'span';
+    }
+  }
+
+  // Header
+  tt.appendChild(mk('div','th'));
+  DAYS.forEach(d=>tt.appendChild(mk('div','th',d)));
+
+  // Rows
+  PERIODS.forEach((period,pi)=>{
+    // Lunch divider
+    if(pi===4){
+      const div=mk('div','row-divider');
+      tt.appendChild(div);
+    }
+
+    // Label
+    const label=mk('div','row-label');
+    label.innerHTML=`<div class="pname">${period.name}</div><div class="ptime">${period.start}<br>${period.end}</div>`;
+    tt.appendChild(label);
+
+    // Cells
+    DAYS.forEach(day=>{
+      const cell=mk('div','cell');
+      const entry=grid[pi][day];
+
+      if(entry==='span'){
+        cell.className='cell span-cell';
+        tt.appendChild(cell);
+        return;
+      }
+
+      if(entry){
+        const spanRows=entry.pEnd-entry.pStart+1;
+        const blockH=`calc(${spanRows} * var(--slot-h) + ${(spanRows-1)*5}px)`;
+        const color=getColor(entry.name);
+        const delay=(pi*35+DAYS.indexOf(day)*25)+'ms';
+        const timeLabel=PERIODS[entry.pStart].start+' – '+PERIODS[entry.pEnd].end;
+
+        const block=mk('div','course-block');
+        block.style.cssText=`background:${color};height:${blockH};animation-delay:${delay}`;
+        block.innerHTML=`
+          <div class="cb-name">${entry.name}</div>
+          ${entry.location?`<div class="cb-room">📍 ${entry.location}</div>`:''}
+          <div class="cb-time">⏰ ${timeLabel}</div>
+          ${entry.teacher?`<div class="cb-teacher">${entry.teacher}</div>`:''}
+        `;
+        cell.appendChild(block);
+      }
+      tt.appendChild(cell);
+    });
+  });
+}
+
+function mk(tag,cls,txt){
+  const e=document.createElement(tag);
+  e.className=cls;
+  if(txt) e.textContent=txt;
+  return e;
+}
+
+/* ── NOTIFICATIONS ── */
+async function toggleNotif(){
+  if(!('Notification' in window)){showToast('此瀏覽器不支援通知');return}
+  if(notifOn){
+    notifOn=false;notifTimers.forEach(clearTimeout);notifTimers=[];
+    document.getElementById('notifBtn').textContent='🔔 通知';
+    document.getElementById('notifBtn').classList.remove('on');
+    showToast('已關閉通知提醒');return;
+  }
+  const p=await Notification.requestPermission();
+  if(p==='granted'){
+    notifOn=true;
+    document.getElementById('notifBtn').textContent='🔕 關閉通知';
+    document.getElementById('notifBtn').classList.add('on');
+    showToast('✓ 通知開啟，課前 5 分鐘提醒');
+    if(courses.length) scheduleNotifs();
+  }else showToast('通知權限被拒絕');
+}
+
+function scheduleNotifs(){
+  notifTimers.forEach(clearTimeout);notifTimers=[];
+  const now=new Date();
+  const todayDay=['','MON','TUE','WED','THU','FRI','SAT','SUN'][now.getDay()]||'';
+  for(const c of courses){
+    if(c.day!==todayDay) continue;
+    const per=PERIODS[c.pStart]; if(!per) continue;
+    const [h,m]=per.start.split(':').map(Number);
+    const ct=new Date();ct.setHours(h,m,0,0);
+    const diff=ct-now-5*60*1000;
+    if(diff>0){
+      const tid=setTimeout(()=>{
+        new Notification(`📚 即將開始：${c.name}`,{
+          body:`${per.start}${c.location?' · '+c.location:''}${c.teacher?' · '+c.teacher:''}`,
+        });
+      },diff);
+      notifTimers.push(tid);
+    }
+  }
+}
+
+/* ── EXPORT ── */
+function exportImg(){
+  if(!courses.length){showToast('請先生成課表再匯出');return}
+  showToast('正在生成圖片…');
+
+  const canvas=document.getElementById('exportCanvas');
+  const ctx=canvas.getContext('2d');
+
+  const PAD=32,LABLEW=108,COLW=138,ROWH=86,HEADERH=58,DIVH=24;
+  const W=PAD*2+LABLEW+COLW*5;
+  const H=PAD*2+HEADERH+PERIODS.length*ROWH+DIVH;
+
+  canvas.width=W;canvas.height=H;
+
+  // BG
+  ctx.fillStyle='#f2ebe0';ctx.fillRect(0,0,W,H);
+  const g=ctx.createRadialGradient(W*.15,H*.15,0,W*.15,H*.15,W*.5);
+  g.addColorStop(0,'rgba(200,216,192,.22)');g.addColorStop(1,'rgba(200,216,192,0)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+
+  // Build grid
+  const grid=Array.from({length:PERIODS.length},()=>Object.fromEntries(DAYS.map(d=>[d,null])));
+  for(const c of courses){
+    for(let p=c.pStart;p<=c.pEnd&&p<PERIODS.length;p++){
+      grid[p][c.day]=(p===c.pStart)?c:'span';
+    }
+  }
+
+  // Day headers
+  ctx.textAlign='center';ctx.fillStyle='#7a6452';
+  ctx.font='600 12px sans-serif';
+  DAYS.forEach((d,i)=>ctx.fillText(d,PAD+LABLEW+i*COLW+COLW/2,PAD+36));
+
+  // Rows
+  PERIODS.forEach((period,pi)=>{
+    const divOff=pi>=4?DIVH:0;
+    const y=PAD+HEADERH+pi*ROWH+divOff;
+
+    // Lunch divider
+    if(pi===4){
+      ctx.strokeStyle='rgba(120,90,60,.18)';ctx.lineWidth=1.5;
+      ctx.beginPath();
+      ctx.moveTo(PAD+LABLEW,y-DIVH/2);ctx.lineTo(W-PAD,y-DIVH/2);
+      ctx.stroke();
+    }
+
+    // Row label
+    ctx.textAlign='right';
+    ctx.fillStyle='#7a6452';ctx.font='700 12px sans-serif';
+    ctx.fillText(period.name,PAD+LABLEW-12,y+26);
+    ctx.fillStyle='#b0957a';ctx.font='10px sans-serif';
+    ctx.fillText(period.start,PAD+LABLEW-12,y+42);
+    ctx.fillText(period.end,PAD+LABLEW-12,y+56);
+
+    // Cells
+    DAYS.forEach((day,di)=>{
+      const entry=grid[pi][day];
+      const cx=PAD+LABLEW+di*COLW;
+
+      if(!entry){
+        ctx.strokeStyle='rgba(120,90,60,.08)';ctx.lineWidth=1;
+        roundRect(ctx,cx+4,y+4,COLW-8,ROWH-8,10,'stroke');
+        return;
+      }
+      if(entry==='span') return;
+
+      const spanRows=entry.pEnd-entry.pStart+1;
+      const bh=spanRows*ROWH-8;
+
+      // Block fill
+      ctx.fillStyle=getColor(entry.name);
+      roundRect(ctx,cx+5,y+4,COLW-10,bh,14,'fill');
+
+      // Text
+      ctx.textAlign='center';
+      const bcx=cx+COLW/2;
+      const timeLabel=PERIODS[entry.pStart].start+' – '+PERIODS[entry.pEnd].end;
+
+      // Calculate vertical layout
+      const lines=[];
+      lines.push({text:entry.name,font:'500 13px sans-serif',color:'#3d2f22',lh:16,wrap:true});
+      if(entry.location) lines.push({text:'📍 '+entry.location,font:'600 11px sans-serif',color:'#5a4032',lh:15,pill:true});
+      lines.push({text:'⏰ '+timeLabel,font:'10px sans-serif',color:'#9a8272',lh:14});
+      if(entry.teacher) lines.push({text:entry.teacher,font:'10px sans-serif',color:'#b0957a',lh:13});
+
+      const totalH=lines.reduce((s,l)=>s+l.lh+3,0);
+      let ty=y+4+bh/2-totalH/2;
+
+      for(const line of lines){
+        ctx.fillStyle=line.color;
+        ctx.font=line.font;
+        if(line.pill&&entry.location){
+          // Draw pill
+          const tw=ctx.measureText(line.text).width+16;
+          ctx.fillStyle='rgba(61,47,34,.09)';
+          roundRect(ctx,bcx-tw/2,ty-11,tw,18,5,'fill');
+          ctx.fillStyle=line.color;
+          ctx.font=line.font;
+          ctx.fillText(line.text,bcx,ty+1);
+        }else if(line.wrap){
+          canvasWrap(ctx,line.text,bcx,ty,COLW-18,line.lh);
+        }else{
+          ctx.fillText(line.text,bcx,ty+1);
+        }
+        ty+=line.lh+3;
+        // Extra space after name if it wrapped
+        if(line.wrap&&ctx.measureText(line.text).width>COLW-18) ty+=line.lh-4;
+      }
+    });
+  });
+
+  canvas.style.display='block';
+  const a=document.createElement('a');
+  a.download='我的課表.png';a.href=canvas.toDataURL('image/png');a.click();
+  setTimeout(()=>canvas.style.display='none',100);
+  showToast('✓ 課表圖片已下載');
+}
+
+function roundRect(ctx,x,y,w,h,r,mode){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+  mode==='fill'?ctx.fill():ctx.stroke();
+}
+
+function canvasWrap(ctx,text,cx,y,maxW,lh){
+  const chars=[...text];let line='';const ls=[];
+  for(const ch of chars){
+    if(ctx.measureText(line+ch).width>maxW&&line){ls.push(line);line=ch}else line+=ch;
+  }
+  if(line)ls.push(line);
+  ls.forEach((l,i)=>ctx.fillText(l,cx,y+i*lh));
+}
+
+/* ── HELPERS ── */
+function loadDemo(){
+  document.getElementById('inputTA').value=
+`週一 D5-D6 初級英文 ES804 張育慈
+週一 D7-D8 體育(排球) 排球場地 李宗翰
+週二 D1-D2 現代散文與習作 LI105 王秀瑋
+週二 D3-D4 地方想像 LI402 曾聖益
+週二 D5-D6 國文 LI405
+週二 D7-D8 企劃與應用文書寫作 LI303
+週三 D3-D4 文學概論 LI100 林以衛
+週三 D5-D6 導師時間 LI403 許朝陽
+週四 D3-D4 唐宋文學研讀 LI405 曾聖益
+週四 D5-D6 讀書指導 LI100 黃澤鈞
+週四 D7-D8 國學專讀 LI100 胡正之
+週五 D3-D4 史記 LE304 林郁迢`;
+}
+
+let toastTimer;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),3200);
+}
+
+loadDemo();
+</script>
+
+</body>
+</html>
